@@ -820,3 +820,18 @@
   - Responses
   - Safeguards
   - Billing
+- title: CMA with MongoDB Atlas
+  description: One end-to-end cookbook for MongoDB Atlas on Claude Managed Agents — three
+    ways to connect (host-side custom tool, self-hosted sandbox, self-hosted MCP), the four
+    retrieval patterns (vector, full-text, reciprocal rank fusion, $graphLookup) as liftable
+    building blocks, and a human-in-the-loop fraud-review agent with MongoDB Atlas as the system of
+    record and audit backbone.
+  path: managed_agents/CMA_with_mongodb_atlas.ipynb
+  authors:
+  - mohammaddaoudfarooqi
+  date: '2026-06-11'
+  categories:
+  - Claude Managed Agents
+  - RAG & Retrieval
+  - Integrations
+  - Tools

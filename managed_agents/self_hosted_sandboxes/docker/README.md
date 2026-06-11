@@ -16,9 +16,13 @@ env contract, just plain Docker on a host you control.
   `grep` toolset, and the work-item force-stop on exit.
 - **`on-work.sh`** — invoked by the poller per work item. Reads the
   `ANTHROPIC_{WORK_ID,ENVIRONMENT_ID,SESSION_ID,ENVIRONMENT_KEY}` the poller
-  sets, drains the work JSON on stdin, and starts a detached `--rm`
-  per-session container (idempotent: a duplicate item for a live session is a
-  no-op). Exits immediately so the poller claims the next item.
+  sets, drains the work JSON on stdin, and `exec`s a `--rm` per-session
+  container in the **foreground** (idempotent: a duplicate item for a live
+  session is a no-op). It blocks until the container exits — it must, because
+  `ant beta:worker poll` posts a stop on the work item the moment the
+  `--on-work` script returns (no CLI opt-out). A detached `docker run -d` would
+  let the poller stop the work before the container could claim it, so the
+  `bash` tool call would never run.
 - **`start.sh`** — builds the image and execs the host poller with
   `--on-work on-work.sh`.
 
@@ -34,6 +38,36 @@ heartbeat, force-stop) **and** as `ANTHROPIC_AUTH_TOKEN` (the CLI's
 skill-download client resolves only `ANTHROPIC_API_KEY` /
 `ANTHROPIC_AUTH_TOKEN`, not `ANTHROPIC_ENVIRONMENT_KEY` — without it skills
 silently fail to download).
+
+## Querying MongoDB from the sandbox
+
+This image bundles `python3` + `pymongo`, and `on-work.sh` forwards an optional `MONGODB_URI`
+into each per-session container, so the agent can query MongoDB straight from its `bash` tool:
+
+```sh
+python3 -c 'import os; from pymongo import MongoClient; \
+c = MongoClient(os.environ["MONGODB_URI"]); \
+print(list(c["mydb"]["mycoll"].find({}, {"_id": 0}).limit(5)))'
+```
+
+Set it host-side before `./start.sh` (it flows poller → `on-work.sh` → container):
+
+```sh
+export MONGODB_URI="mongodb+srv://<user>:<password>@<cluster>/"
+```
+
+`MONGODB_URI` is **your** secret, not Anthropic's. Because this is a container you build and run,
+it's a normal env var that never reaches the control plane or the session event history — the
+self-hosted advantage. (A *cloud* sandbox has no env-var or vault channel for a database secret,
+so there you keep the credential host-side behind a custom tool instead. See the
+[MongoDB-on-CMA landing page](../../mongodb_on_cma/README.md) and the
+[cookbook](../../mongodb_on_cma/working_with_mongodb_on_cma.ipynb), whose Section 1
+walks all three connection paths.)
+
+The agent's `bash` runs inside this container, so it can read `MONGODB_URI` — fine when you trust
+the task. For least privilege, swap the built-in toolset for your own worker tool that exposes a
+narrow `mongo_query(...)` instead of the raw URI. Prefer the MongoDB shell? Add `mongosh` to the
+image (MongoDB's apt repo) and call `mongosh "$MONGODB_URI" --eval '…'`.
 
 ## Prerequisites
 
